@@ -1,9 +1,12 @@
 
+
 # To compile and run with a lab solution, set the lab name in lab.mk
 # (e.g., LAB=util).  Run make grade to test solution with the lab's
 # grade script (e.g., grade-lab-util).
 
 -include conf/lab.mk
+GCC_VERSION := $(shell $(CC) -dumpversion 2>/dev/null | cut -d. -f1)
+
 
 K=kernel
 U=user
@@ -98,6 +101,7 @@ LABUPPER = $(shell echo $(LAB) | tr a-z A-Z)
 XCFLAGS += -DSOL_$(LABUPPER) -DLAB_$(LABUPPER)
 endif
 
+CFLAGS += -Wno-infinite-recursion -fno-builtin
 CFLAGS += $(XCFLAGS)
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
@@ -193,6 +197,11 @@ UPROGS=\
 	$U/_grind\
 	$U/_wc\
 	$U/_zombie\
+	$U/_sleep\
+	$U/_pingpong\
+	$U/_primes\
+	$U/_find\
+	$U/_xargs\
 
 
 
