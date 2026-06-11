@@ -77,8 +77,39 @@ usertrap(void)
     exit(-1);
 
   // give up the CPU if this is a timer interrupt.
-  if(which_dev == 2)
+  if(which_dev == 2){
+    //都不为0，启用警告
+    if(p->sig_handler!=0||p->sig_ticks!=0){
+
+      if(p->alarm_ruuning==0){
+        //时间间隔耗尽，调用用户警报函数
+        if(p->sig_ticks_left==0){
+          p->alarm_ruuning=1;
+          //调用函数
+          p->temp_trapframe.epc = p->trapframe->epc;
+          p->temp_trapframe.ra = p->trapframe->ra;
+          p->temp_trapframe.s0 = p->trapframe->s0;
+          p->temp_trapframe.sp = p->trapframe->sp;
+          p->temp_trapframe.a0 = p->trapframe->a0;
+          p->temp_trapframe.a1 = p->trapframe->a1;
+          p->temp_trapframe.a2 = p->trapframe->a2;
+          p->temp_trapframe.a3 = p->trapframe->a3;
+          p->temp_trapframe.a4 = p->trapframe->a4;
+          p->temp_trapframe.a5 = p->trapframe->a5;
+          p->temp_trapframe.a6 = p->trapframe->a5;
+          p->temp_trapframe.a7 = p->trapframe->a7;
+          p->trapframe->epc = p->sig_handler;
+          //重新获得信号处理
+          p->sig_ticks_left=p->sig_ticks;
+        }else{
+          p->sig_ticks_left--;
+        }
+    }
+    }
+    
     yield();
+  }
+    
 
   usertrapret();
 }

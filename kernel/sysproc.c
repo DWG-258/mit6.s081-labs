@@ -97,3 +97,45 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_sigreturn(void)
+{
+  struct proc* p = myproc();
+  p->trapframe->epc = p->temp_trapframe.epc;
+  p->trapframe->ra = p->temp_trapframe.ra;
+  p->trapframe->s0 = p->temp_trapframe.s0;
+  p->trapframe->sp = p->temp_trapframe.sp;
+  p->trapframe->a0 = p->temp_trapframe.a0;
+  p->trapframe->a1 = p->temp_trapframe.a1;
+  p->trapframe->a2 = p->temp_trapframe.a2;
+  p->trapframe->a3 = p->temp_trapframe.a3;
+  p->trapframe->a4 = p->temp_trapframe.a4;
+  p->trapframe->a5 = p->temp_trapframe.a5;
+  p->trapframe->a6 = p->temp_trapframe.a6;
+  p->trapframe->a7 = p->temp_trapframe.a7;
+  p->alarm_ruuning = 0;
+
+  return 0; 
+}
+
+uint64
+sys_sigalarm(void)
+{
+  //获取参数,警报间隔/警报函数指针
+  int ticks;
+  uint64 sig_hanlder;
+  if(argint(0, &ticks) < 0)
+    return -1;
+  if(argaddr(1, &sig_hanlder)<0)
+    return -1;
+  
+  struct proc* p = myproc();
+  p->sig_handler = sig_hanlder;
+  p->sig_ticks=ticks;
+  p->sig_ticks_left=ticks;
+
+
+  
+  return 0;
+}
