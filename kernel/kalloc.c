@@ -21,7 +21,26 @@ struct run {
 struct {
   struct spinlock lock;
   struct run *freelist;
+  //引用大小
+  int ref_counts[(PHYSTOP - KERNBASE) / PGSIZE];
 } kmem;
+
+void
+krefcount_increase(void *pa){
+  acquire(&kmem.lock);
+  //r就是这一页的起始物理地址
+  kmem.ref_counts[((uint64)pa-KERNBASE) / PGSIZE]++;
+  release(&kmem.lock);
+}
+
+void
+krefcount_decrease(void *pa){
+  acquire(&kmem.lock);
+  //r就是这一页的起始物理地址
+  if(kmem.ref_counts[((uint64)pa-KERNBASE) / PGSIZE]>1)
+    kmem.ref_counts[((uint64)pa-KERNBASE) / PGSIZE]--;
+  release(&kmem.lock);
+}
 
 void
 kinit()
@@ -51,14 +70,21 @@ kfree(void *pa)
   if(((uint64)pa % PGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP)
     panic("kfree");
 
-  // Fill with junk to catch dangling refs.
-  memset(pa, 1, PGSIZE);
-
   r = (struct run*)pa;
 
   acquire(&kmem.lock);
+  // > 1 就-- ， ==1 就放回空闲队列
+  if(kmem.ref_counts[((uint64)r-KERNBASE) / PGSIZE]>1){
+    kmem.ref_counts[((uint64)r-KERNBASE) / PGSIZE]--;
+    release(&kmem.lock);
+    return;
+  }
+  // Fill with junk to catch dangling refs.
+  memset(pa, 1, PGSIZE);
+  kmem.ref_counts[((uint64)r-KERNBASE) / PGSIZE] = 0;
   r->next = kmem.freelist;
   kmem.freelist = r;
+ 
   release(&kmem.lock);
 }
 
@@ -72,8 +98,11 @@ kalloc(void)
 
   acquire(&kmem.lock);
   r = kmem.freelist;
-  if(r)
+  if(r){
     kmem.freelist = r->next;
+    //r就是这一页的起始物理地址
+    kmem.ref_counts[((uint64)r-KERNBASE) / PGSIZE]=1;
+  }
   release(&kmem.lock);
 
   if(r)

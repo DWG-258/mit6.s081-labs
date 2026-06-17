@@ -303,7 +303,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  uint new_flags;
+  
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -312,13 +313,21 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
-      goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    new_flags = flags;
+    if(flags & PTE_W){
+    //父子进程的pte,flags 的 W位置置0 ,RSW = 1 表示COW页面
+    new_flags = flags &(~PTE_W);
+    new_flags |= PTE_RSW;
+    *pte &= ~PTE_W;
+    *pte |= PTE_RSW;
+    }
+
+    //直接映射到new pagetabel,不要kalloc
+    if(mappages(new, i, PGSIZE, (uint64)pa, new_flags) != 0){
+      
       goto err;
     }
+    krefcount_increase((void*)pa);
   }
   return 0;
 
@@ -347,7 +356,34 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  //与遇到缺页错误时同样的处理方法
+  //W时缺页中断,如果是COW(RSW = 1)
+    // printf(" page falut w \n");
+    va0 = PGROUNDDOWN(dstva);
+    if(va0 >= PGSIZE && va0 < MAXVA ){
+      pte_t* pte =walk(pagetable,va0,0);
+      if( pte != 0 && (PTE_FLAGS(*pte) & PTE_RSW)){
+      uint64 pa = PTE2PA(*pte);
+      //创建新的页 , flags 的 w恢复
+      uint flags = (PTE_FLAGS(*pte)|PTE_W)&(~PTE_RSW);
+      //创建新的页，并复制
+      char* mem;
+      if((mem = kalloc()) == 0) {
+        //kill进程
+        printf("no empty page\n");
+        return -1;
+      }else{
+          memmove(mem, (char*)pa, PGSIZE);
+      //重新赋值PTE
+      *pte = PA2PTE(mem) | flags;
+      //减少原pa页引用次数,即释放内存，在kfree内部会处理
+      kfree((void*)pa);
+      }
+    }
+    }else{
+      return -1;
+    }
+  
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);

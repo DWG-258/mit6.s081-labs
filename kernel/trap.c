@@ -50,6 +50,8 @@ usertrap(void)
   // save user program counter.
   p->trapframe->epc = r_sepc();
   
+  
+  
   if(r_scause() == 8){
     // system call
 
@@ -65,7 +67,37 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if((which_dev = devintr()) != 0){
+  } else if(r_scause() == 15 ){ 
+    //W时缺页中断,如果是COW(RSW = 1)
+    // printf(" page falut w \n");
+    uint64 page_va = PGROUNDDOWN(r_stval());
+    if(page_va >= PGSIZE && page_va < MAXVA ){
+      pte_t* pte =walk(p->pagetable,page_va,0);
+      if( pte != 0 && (PTE_FLAGS(*pte) & PTE_RSW)){
+        uint64 pa = PTE2PA(*pte);
+      //创建新的页 , flags 的 w恢复
+      uint flags = (PTE_FLAGS(*pte)|PTE_W)&(~PTE_RSW);
+      //创建新的页，并复制
+      char* mem;
+      if((mem = kalloc()) == 0) {
+        //kill进程
+        printf("no empty page\n");
+        p->killed = 1;
+      }else{
+          memmove(mem, (char*)pa, PGSIZE);
+      //重新赋值PTE
+      *pte = PA2PTE(mem) | flags;
+      //减少原pa页引用次数,即释放内存，在kfree内部会处理
+      kfree((void*)pa);
+      }
+   
+    }
+    }else{
+      p->killed = 1;
+    }
+      
+
+  }else if((which_dev = devintr()) != 0){
     // ok
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
