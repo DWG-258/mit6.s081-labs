@@ -33,9 +33,12 @@ barrier()
   pthread_mutex_lock(&bstate.barrier_mutex);
   bstate.nthread++;
 
+  int my_round = bstate.round;
   if(bstate.nthread < nthread){
     //不是最后一个线程，睡眠等待
-    pthread_cond_wait(&bstate.barrier_cond,&bstate.barrier_mutex);
+  while (my_round == bstate.round) {
+    pthread_cond_wait(&bstate.barrier_cond, &bstate.barrier_mutex);
+  }
   }else{
     //最后一个,重置，并增加轮数
     bstate.nthread=0;
