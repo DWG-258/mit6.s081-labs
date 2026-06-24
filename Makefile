@@ -93,6 +93,7 @@ LABUPPER = $(shell echo $(LAB) | tr a-z A-Z)
 XCFLAGS += -DSOL_$(LABUPPER) -DLAB_$(LABUPPER)
 endif
 
+CFLAGS += -Wno-infinite-recursion -fno-builtin
 CFLAGS += $(XCFLAGS)
 CFLAGS += -MD
 CFLAGS += -mcmodel=medany
